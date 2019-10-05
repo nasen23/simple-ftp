@@ -1,94 +1,78 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include "common.h"
+#include "server.h"
 
-#include <unistd.h>
-#include <errno.h>
+socklen_t sockaddr_size = sizeof(struct sockaddr);
 
-#include <ctype.h>
-#include <string.h>
-#include <memory.h>
-#include <stdio.h>
+void server_for_client(int client_sfd);
 
 int main(int argc, char **argv) {
-    int listenfd, connfd;        //监听socket和连接socket不一样，后者用于数据传输
-    struct sockaddr_in addr;
-    char sentence[8192];
-    int p;
-    int len;
+    int n;
+    int server_sfd, client_sfd;        //监听socket和连接socket不一样，后者用于数据传输
+    struct sockaddr_in sin_server, sin_client;
 
     //创建socket
-    if ((listenfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1) {
-        printf("Error socket(): %s(%d)\n", strerror(errno), errno);
-        return 1;
+    if ((server_sfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+        error("socket ()", server_sfd);
     }
 
     //设置本机的ip和port
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = 6789;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);    //监听"0.0.0.0"
+    memset(&sin_server, 0, sizeof(sin_server));
+    sin_server.sin_family = AF_INET;
+    sin_server.sin_port = PORT_SERVER;
+    sin_server.sin_addr.s_addr = htonl(INADDR_ANY);    //监听"0.0.0.0"
 
     //将本机的ip和port与socket绑定
-    if (bind(listenfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        printf("Error bind(): %s(%d)\n", strerror(errno), errno);
-        return 1;
+    if ((n = bind(server_sfd, (struct sockaddr*) &sin_server, sockaddr_size)) < 0) {
+        error("bind ()", n);
     }
 
     //开始监听socket
-    if (listen(listenfd, 10) == -1) {
-        printf("Error listen(): %s(%d)\n", strerror(errno), errno);
-        return 1;
+    if ((n = listen(server_sfd, 10)) < 0) {
+        error("listen ()", n);
     }
+
+    printf("Simple FTP server started at %s:%d. Waiting for clients... \n\n", IP_SERVER, PORT_SERVER);
 
     //持续监听连接请求
     while (1) {
         //等待client的连接 -- 阻塞函数
-        if ((connfd = accept(listenfd, NULL, NULL)) == -1) {
-            printf("Error accept(): %s(%d)\n", strerror(errno), errno);
-            continue;
+        if ((client_sfd = accept(server_sfd, (struct sockaddr *) &sin_client, &sockaddr_size)) < 0) {
+            error("accept ()", client_sfd);
         }
 
+        printf("Communacating with %s:%d\n", inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port));
+
+        server_for_client(client_sfd);
+    }
+
+
+    close(server_sfd);
+}
+
+void server_for_client(int client_sfd) {
+    int p;
+    char buf[BUF_SIZE];
+
+    while (1) {
         //榨干socket传来的内容
         p = 0;
-        while (1) {
-            int n = read(connfd, sentence + p, 8191 - p);
-            if (n < 0) {
-                printf("Error read(): %s(%d)\n", strerror(errno), errno);
-                close(connfd);
-                continue;
-            } else if (n == 0) {
-                break;
-            } else {
-                p += n;
-                if (sentence[p - 1] == '\n') {
-                    break;
-                }
-            }
+        if ((p = recv(client_sfd, buf, BUF_SIZE, 0)) < 0) {
+            error("recv ()", p);
         }
         //socket接收到的字符串并不会添加'\0'
-        sentence[p - 1] = '\0';
-        len = p - 1;
+        buf[p] = '\0';
 
         //字符串处理
-        for (p = 0; p < len; p++) {
-            sentence[p] = toupper(sentence[p]);
+        for (p = 0; p < strlen(buf); p++) {
+            buf[p] = toupper(buf[p]);
         }
 
         //发送字符串到socket
-        p = 0;
-        while (p < len) {
-            int n = write(connfd, sentence + p, len + 1 - p);
-            if (n < 0) {
-                printf("Error write(): %s(%d)\n", strerror(errno), errno);
-                return 1;
-             } else {
-                p += n;
-            }
+        if ((p = send(client_sfd, buf, strlen(buf), 0)) < 0) {
+            error("send ()", p);
         }
-
-        close(connfd);
     }
 
-    close(listenfd);
+    close(client_sfd);
+    fflush(stdout);
 }
-
