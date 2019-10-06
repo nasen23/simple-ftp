@@ -3,7 +3,7 @@
 
 socklen_t sockaddr_size = sizeof(struct sockaddr);
 
-void server_for_client(int client_sfd);
+void serve_for_client(int client_sfd);
 
 int main(int argc, char **argv) {
     int n;
@@ -42,14 +42,14 @@ int main(int argc, char **argv) {
 
         printf("Communacating with %s:%d\n", inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port));
 
-        server_for_client(client_sfd);
+        serve_for_client(client_sfd);
     }
 
 
     close(server_sfd);
 }
 
-void server_for_client(int client_sfd) {
+void serve_for_client(int client_sfd) {
     int p;
     char buf[BUF_SIZE];
 
