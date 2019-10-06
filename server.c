@@ -40,9 +40,19 @@ int main(int argc, char **argv) {
             error("accept ()", client_sfd);
         }
 
-        printf("Communacating with %s:%d\n", inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port));
+        int pid = fork();
+        if (pid < 0) {
+            error("forking child process", pid);
+        } else if (pid == 0) {
+            close(server_sfd);
+            serve_for_client(client_sfd);
+            return 0;
+        } else {
+            printf("Communacating with %s:%d\n on child process %d",
+                   inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port), pid);
+        }
 
-        serve_for_client(client_sfd);
+        close(client_sfd);
     }
 
 
