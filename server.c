@@ -3,8 +3,6 @@
 
 socklen_t sockaddr_size = sizeof(struct sockaddr);
 
-void serve_for_client(int client_sfd);
-
 int main(int argc, char **argv) {
     int n;
     int server_sfd, client_sfd;        //监听socket和连接socket不一样，后者用于数据传输
@@ -45,11 +43,9 @@ int main(int argc, char **argv) {
             error("forking child process", pid);
         } else if (pid == 0) {
             close(server_sfd);
+            printf("Communacating with %s:%d\n", inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port));
             serve_for_client(client_sfd);
             return 0;
-        } else {
-            printf("Communacating with %s:%d\n on child process %d",
-                   inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port), pid);
         }
 
         close(client_sfd);
@@ -62,27 +58,126 @@ int main(int argc, char **argv) {
 void serve_for_client(int client_sfd) {
     int p;
     char buf[BUF_SIZE];
+    struct CommandList *cmd;
+    struct ServerCtx context;
 
-    while (1) {
+    context.client_sfd = client_sfd;
+    context.logged_in = 0;
+    context.quit = 0;
+    context.username = NULL;
+    while (!context.quit) {
         //榨干socket传来的内容
-        p = 0;
-        if ((p = recv(client_sfd, buf, BUF_SIZE, 0)) < 0) {
-            error("recv ()", p);
-        }
-        //socket接收到的字符串并不会添加'\0'
-        buf[p] = '\0';
+        recv_msg(client_sfd, buf);
 
         //字符串处理
-        for (p = 0; p < strlen(buf); p++) {
-            buf[p] = toupper(buf[p]);
-        }
+        /* for (p = 0; p < strlen(buf); p++) { */
+        /*     buf[p] = toupper(buf[p]); */
+        /* } */
+        // cmd->arg is allocated here
+        cmd = parse_string(buf);
+        if (!cmd) {
+            // error happend when parsing arguments
+            send_msg(client_sfd, "correct commands please");
+        } else {
+          handle_command(cmd, &context);
 
-        //发送字符串到socket
-        if ((p = send(client_sfd, buf, strlen(buf), 0)) < 0) {
-            error("send ()", p);
+          //发送字符串到socket
+          /* send_msg(client_sfd, buf); */
+
+          // don't forget to deallocate
+          free(cmd->arg);
+          free(cmd);
         }
     }
 
     close(client_sfd);
     fflush(stdout);
+}
+
+void recv_msg(int client_sfd, char* buf) {
+    int res;
+    if ((res = recv(client_sfd, buf, BUF_SIZE, 0)) < 0) {
+        error("recv ()", res);
+    }
+    buf[res] = '\0';
+}
+
+void send_msg(int client_sfd, char *buf) {
+    int res;
+    if ((res = send(client_sfd, buf, strlen(buf), 0)) < 0) {
+        error("recv ()", res);
+    }
+}
+
+void handle_command(struct CommandList *cmd, struct ServerCtx* context) {
+    switch (cmd->cmd) {
+        case USER:
+            ftp_user(cmd->arg, context);
+            break;
+        case PASS:
+            ftp_pass(cmd->arg, context);
+            break;
+        case QUIT:
+            ftp_quit(context);
+        default:
+            break;
+    }
+}
+
+void ftp_user(char *username, struct ServerCtx* context) {
+    if ( context->logged_in ) {
+        send_msg(context->client_sfd, "You are already logged in.\n");
+        return;
+    }
+
+    if ( check_valid_user(username) ) {
+        context->username = username;
+        send_msg(context->client_sfd, "Please input password.");
+    } else {
+        send_msg(context->client_sfd, "Invalid username.");
+    }
+}
+
+void ftp_pass(char *password, struct ServerCtx* context) {
+    if ( context->logged_in ) {
+        send_msg(context->client_sfd, "You are already logged in.\n");
+        return;
+    }
+
+    if ( !context->username ) {
+        send_msg(context->client_sfd, "I don't know which user you are.");
+        return;
+    }
+
+    if ( check_password(context->username, password) ) {
+        context->logged_in = 1;
+        char message[100];
+        sprintf(message, "Welcome, user %s", context->username);
+        send_msg(context->client_sfd, message);
+    } else {
+        send_msg(context->client_sfd, "Wrong password.");
+    }
+}
+
+void ftp_quit(struct ServerCtx* context) {
+    context->quit = 1;
+}
+
+int check_valid_user(char *username) {
+    for (int i = 0; i < AUTH_USER_COUNT; ++i) {
+        if ( !strcmp(username, auth_users[i]) ) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int check_password(char *username, char *password) {
+    // TODO: check password
+    return 1;
+}
+
+void print_usage() {
+    printf("usage: ");
 }

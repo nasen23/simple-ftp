@@ -49,7 +49,6 @@ int main(int argc, char **argv) {
         printf("FROM SERVER: %s", data);
 
     }
-
     close(sockfd);
 
     return 0;
