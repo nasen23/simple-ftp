@@ -1,7 +1,10 @@
 #ifndef __SERVER_H_
 #define __SERVER_H_
 
-#include "parse_cmd.h"
+#include <stddef.h>
+
+struct sockaddr_in;
+struct CommandList;
 
 struct ServerCtx {
     int client_sfd;
@@ -16,7 +19,7 @@ const char* auth_users[] = {
 
 const size_t AUTH_USER_COUNT = 1;
 
-void serve_for_client(int client_sfd);
+void serve_for_client(int client_sfd, struct sockaddr_in *sin_client);
 void recv_msg(int client_sfd, char *);
 void send_msg(int client_sfd, char *msg);
 void handle_command(struct CommandList*, struct ServerCtx*);

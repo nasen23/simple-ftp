@@ -1,5 +1,6 @@
 #include "common.h"
 #include "server.h"
+#include "parse_cmd.h"
 
 socklen_t sockaddr_size = sizeof(struct sockaddr);
 
@@ -48,8 +49,7 @@ int main(int argc, char **argv) {
             error("forking child process", pid);
         } else if (pid == 0) {
             close(server_sfd);
-            printf("Communacating with %s:%d\n", inet_ntoa(sin_client.sin_addr), ntohs(sin_client.sin_port));
-            serve_for_client(client_sfd);
+            serve_for_client(client_sfd, &sin_client);
             return 0;
         }
 
@@ -60,11 +60,14 @@ int main(int argc, char **argv) {
     close(server_sfd);
 }
 
-void serve_for_client(int client_sfd) {
+void serve_for_client(int client_sfd, struct sockaddr_in *sin_client) {
     int err;
     char buf[BUF_SIZE];
     struct CommandList cmd;
     struct ServerCtx context;
+
+    printf("Communacating with %s:%d\n", inet_ntoa(sin_client->sin_addr), ntohs(sin_client->sin_port));
+    send_msg(client_sfd, "220 Anonymous FTP server ready.\n");
 
     context.client_sfd = client_sfd;
     context.logged_in = 0;
@@ -85,7 +88,7 @@ void serve_for_client(int client_sfd) {
 
     free(context.username);
 
-    printf("Closing communication with sockfd %d", client_sfd);
+    printf("Closing communacation with %s:%d\n", inet_ntoa(sin_client->sin_addr), ntohs(sin_client->sin_port));
     close(client_sfd);
     fflush(stdout);
 }

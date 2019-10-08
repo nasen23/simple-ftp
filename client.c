@@ -21,9 +21,16 @@ int main(int argc, char **argv) {
     }
 
     //连接上目标主机（将socket和目标主机连接）-- 阻塞函数
-    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+    if ((n = connect(sockfd, (struct sockaddr*)&addr, sizeof(addr))) < 0) {
         error("connect ()", n);
     }
+
+    // receive initial message here
+    if ((n = recv(sockfd, data, BUF_SIZE, 0)) < 0) {
+        error("recv ()", n);
+    }
+
+    printf("FROM SERVER: %s", data);
 
     while (1) {
         //获取键盘输入
