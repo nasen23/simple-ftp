@@ -1,8 +1,11 @@
 CC = gcc
 DEBUGGER = gdb
 CFLAGS = -g
-SRCCLIENT = common.h client.c
-SRCSERVER = common.h server.h server.c parse_cmd.h
+COMMON = common/common.h
+DIRCLIENT = ./client
+DIRSERVER = ./server
+SRCCLIENT = ${COMMON} $(wildcard ${DIRCLIENT}/*.c) $(wildcard ${DIRCLIENT}/*.h)
+SRCSERVER = ${COMMON} $(wildcard ${DIRSERVER}/*.c) $(wildcard ${DIRSERVER}/*.h)
 BIN = bin
 BINCLIENT = ${BIN}/client.out
 BINSERVER = ${BIN}/server.out
