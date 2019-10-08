@@ -17,7 +17,7 @@
 
 
 #define IP_SERVER "127.0.0.1"
-#define PORT_SERVER 6789
+#define PORT_SERVER 6791
 
 #define BUF_SIZE 8192
 

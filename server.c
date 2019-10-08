@@ -8,16 +8,21 @@ int main(int argc, char **argv) {
     int server_sfd, client_sfd;        //监听socket和连接socket不一样，后者用于数据传输
     struct sockaddr_in sin_server, sin_client;
 
-    //创建socket
-    if ((server_sfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-        error("socket ()", server_sfd);
-    }
-
     //设置本机的ip和port
     memset(&sin_server, 0, sizeof(sin_server));
     sin_server.sin_family = AF_INET;
     sin_server.sin_port = PORT_SERVER;
     sin_server.sin_addr.s_addr = htonl(INADDR_ANY);    //监听"0.0.0.0"
+
+    //创建socket
+    if ((server_sfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+        error("socket ()", server_sfd);
+    }
+
+    int enable = 1;
+    if ((n = setsockopt(server_sfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int))) < 0) {
+        error("setsockopt(SO_REUSEADDR)", n);
+    }
 
     //将本机的ip和port与socket绑定
     if ((n = bind(server_sfd, (struct sockaddr*) &sin_server, sockaddr_size)) < 0) {
@@ -56,9 +61,9 @@ int main(int argc, char **argv) {
 }
 
 void serve_for_client(int client_sfd) {
-    int p;
+    int err;
     char buf[BUF_SIZE];
-    struct CommandList *cmd;
+    struct CommandList cmd;
     struct ServerCtx context;
 
     context.client_sfd = client_sfd;
@@ -69,27 +74,18 @@ void serve_for_client(int client_sfd) {
         //榨干socket传来的内容
         recv_msg(client_sfd, buf);
 
-        //字符串处理
-        /* for (p = 0; p < strlen(buf); p++) { */
-        /*     buf[p] = toupper(buf[p]); */
-        /* } */
-        // cmd->arg is allocated here
-        cmd = parse_string(buf);
-        if (!cmd) {
+        err = parse_string(&cmd, buf);
+        if (err) {
             // error happend when parsing arguments
-            send_msg(client_sfd, "correct commands please");
+            handle_parse_error(err, &context);
         } else {
-          handle_command(cmd, &context);
-
-          //发送字符串到socket
-          /* send_msg(client_sfd, buf); */
-
-          // don't forget to deallocate
-          free(cmd->arg);
-          free(cmd);
+            handle_command(&cmd, &context);
         }
     }
 
+    free(context.username);
+
+    printf("Closing communication with sockfd %d", client_sfd);
     close(client_sfd);
     fflush(stdout);
 }
@@ -104,7 +100,7 @@ void recv_msg(int client_sfd, char* buf) {
 
 void send_msg(int client_sfd, char *buf) {
     int res;
-    if ((res = send(client_sfd, buf, strlen(buf), 0)) < 0) {
+    if ((res = send(client_sfd, buf, strlen(buf) + 1, 0)) < 0) {
         error("recv ()", res);
     }
 }
@@ -124,6 +120,22 @@ void handle_command(struct CommandList *cmd, struct ServerCtx* context) {
     }
 }
 
+void handle_parse_error(int err, struct ServerCtx* context) {
+    switch (err) {
+        case EMPTY_COMMAND:
+            send_msg(context->client_sfd, "Empty command.\n");
+            break;
+        case UNKNOWN_COMMAND:
+            send_msg(context->client_sfd, "Unknown command.\n");
+            break;
+        case MISSING_ARG:
+            send_msg(context->client_sfd, "Missing argument for command requiring argument.\n");
+        default:
+            // no err
+            break;
+    }
+}
+
 void ftp_user(char *username, struct ServerCtx* context) {
     if ( context->logged_in ) {
         send_msg(context->client_sfd, "You are already logged in.\n");
@@ -131,10 +143,12 @@ void ftp_user(char *username, struct ServerCtx* context) {
     }
 
     if ( check_valid_user(username) ) {
-        context->username = username;
-        send_msg(context->client_sfd, "Please input password.");
+        context->username = realloc(context->username, (1 + strlen(username)) * sizeof(char));
+
+        strcpy(context->username, username);
+        send_msg(context->client_sfd, "Please input password.\n");
     } else {
-        send_msg(context->client_sfd, "Invalid username.");
+        send_msg(context->client_sfd, "Invalid username.\n");
     }
 }
 
@@ -145,17 +159,17 @@ void ftp_pass(char *password, struct ServerCtx* context) {
     }
 
     if ( !context->username ) {
-        send_msg(context->client_sfd, "I don't know which user you are.");
+        send_msg(context->client_sfd, "I don't know which user you are.\n");
         return;
     }
 
     if ( check_password(context->username, password) ) {
         context->logged_in = 1;
         char message[100];
-        sprintf(message, "Welcome, user %s", context->username);
+        sprintf(message, "Welcome, user %s.\n", context->username);
         send_msg(context->client_sfd, message);
     } else {
-        send_msg(context->client_sfd, "Wrong password.");
+        send_msg(context->client_sfd, "Wrong password.\n");
     }
 }
 

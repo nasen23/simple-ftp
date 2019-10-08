@@ -20,6 +20,7 @@ void serve_for_client(int client_sfd);
 void recv_msg(int client_sfd, char *);
 void send_msg(int client_sfd, char *msg);
 void handle_command(struct CommandList*, struct ServerCtx*);
+void handle_parse_error(int err, struct ServerCtx*);
 
 void ftp_user(char *username, struct ServerCtx*);
 void ftp_pass(char *password, struct ServerCtx*);

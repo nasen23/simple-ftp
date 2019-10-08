@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     //设置目标主机的ip和port
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = 6789;
+    addr.sin_port = PORT_SERVER;
     if ((n = inet_pton(AF_INET, IP_SERVER, &addr.sin_addr)) < 0) {            //转换ip地址:点分十进制-->二进制
         error("inet_pton ()", n);
     }
