@@ -344,6 +344,17 @@ void ftp_mkd(char *dir, struct ServerCtx *context) {
         return;
     }
 
+    struct stat st = { 0 };
+    char message[PATH_MAX];
+
+    if ( stat(dir, &st) == -1 ) {
+        mkdir(dir, 0700);
+        sprintf(message, "257 \"%s\"\n", dir);
+        send_msg(context->client_sfd, message);
+    } else {
+        send_msg(context->client_sfd, "550 Creating directory failed\n");
+    }
+
 }
 
 void ftp_cwd(char *dir, struct ServerCtx *context) {
