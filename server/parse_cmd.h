@@ -22,15 +22,18 @@ LIST,
 RMD,
 DELE,
 RNFR,
-RNTO
+RNTO,
+RETR,
+STOR
 } server_cmd_t;
 
 const char* const cmd_list[] = {
 "USER", "PASS", "PORT", "PASV", "QUIT", "ABOR",
-"SYST", "TYPE", "MKD", "CWD", "CDUP", "PWD",
-"LIST", "RMD", "DELE", "RNFR", "RNTO"
+"SYST", "TYPE", "MKD" , "CWD" , "CDUP", "PWD" ,
+"LIST", "RMD" , "DELE", "RNFR", "RNTO", "RETR",
+"STOR"
 };
-const size_t CMD_LEN = 17;
+const size_t CMD_LEN = 19;
 
 const char* const argless_cmd_list[] = {
 "PASV", "QUIT", "SYST", "PWD", "ABOR", "LIST", "CDUP"

@@ -51,6 +51,8 @@ void ftp_rmd(char *dir, struct server_ctx*);
 void ftp_dele(char *fpath, struct server_ctx*);
 void ftp_rnfr(char *fpath, struct server_ctx*);
 void ftp_rnto(char *fname, struct server_ctx*);
+void ftp_retr(char *fname, struct server_ctx*);
+void ftp_stor(char *fname, struct server_ctx*);
 
 void ftp_reset_datasock(struct server_ctx*);
 int ftp_test_flags(struct server_ctx*, int flags);

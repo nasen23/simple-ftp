@@ -94,17 +94,17 @@ void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_cli
     fflush(stdout);
 }
 
-void recv_msg(int client_sfd, char* buf) {
+void recv_msg(int sockfd, char* buf) {
     int res;
-    if ((res = recv(client_sfd, buf, BUF_SIZE, 0)) < 0) {
+    if ((res = recv(sockfd, buf, BUF_SIZE, 0)) < 0) {
         error("recv ()", res);
     }
-    buf[res] = '\0';
+    buf[res] = 0;
 }
 
-void send_msg(int client_sfd, char *buf) {
+void send_msg(int sockfd, char *buf) {
     int res;
-    if ((res = send(client_sfd, buf, strlen(buf) + 1, 0)) < 0) {
+    if ((res = send(sockfd, buf, strlen(buf) + 1, 0)) < 0) {
         error("recv ()", res);
     }
 }
@@ -178,6 +178,14 @@ void handle_command(struct CommandList *cmd, struct server_ctx* context) {
         case RNTO:
             printf("RNTO\r\n");
             ftp_rnto(cmd->arg, context);
+            break;
+        case RETR:
+            printf("RETR\r\n");
+            ftp_retr(cmd->arg, context);
+            break;
+        case STOR:
+            printf("STOR\r\n");
+            ftp_stor(cmd->arg, context);
             break;
         default:
             break;
@@ -278,7 +286,7 @@ void ftp_pasv(struct server_ctx* context) {
     int sockfd;
     int port = randport();
     int p1, p2;
-    struct sockaddr_in addr_in;
+    struct sockaddr_in pasv_addr;
 
     ftp_reset_state(context);
 
@@ -287,21 +295,13 @@ void ftp_pasv(struct server_ctx* context) {
         return;
     }
 
-    // get ip address of server
-    if ( get_my_ipaddr(addr) < 0 ) {
-        send_msg(context->cmd_fd, " Failed to get the ip address of server\r\n");
-        return;
-    }
-
-    printf("%s\r\n", addr);
-
     // create a socket on port between 20000 and 65535
-    if ( (sockfd = create_socket(addr, port, &addr_in)) < 0 ) {
+    if ( (sockfd = create_socket(addr, port, &pasv_addr)) < 0 ) {
         send_msg(context->cmd_fd, " Error creating socket\r\n");
         return;
     }
 
-    if ( bind(sockfd, (struct sockaddr*) &addr_in, sockaddr_size) < 0 ) {
+    if ( bind(sockfd, (struct sockaddr*) &pasv_addr, sockaddr_size) < 0 ) {
         send_msg(context->cmd_fd, " Error on binding addr\r\n");
         return;
     }
@@ -313,8 +313,9 @@ void ftp_pasv(struct server_ctx* context) {
 
     printf("%d\r\n", sockfd);
     context->pasv_fd = sockfd;
+    strcpy(addr, inet_ntoa(pasv_addr.sin_addr));
 
-    for (char *cur = addr; *cur != 0; ++cur) {
+    for (char *cur = addr; *cur; ++cur) {
         if ( *cur == '.' ) {
             *cur = ',';
         }
@@ -452,9 +453,16 @@ void ftp_list(struct server_ctx* context) {
         return;
     }
 
-    if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
-        send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
-        return;
+    if ( ftp_test_flags(context, SERVER_PASV) ) {
+        if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
+            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            return;
+        }
+    } else {
+        if ( (datasfd = connect(context->pasv_fd, NULL, 0)) < 0 ) {
+            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            return;
+        }
     }
 
     getcwd(dir, sizeof(dir));
@@ -555,6 +563,96 @@ void ftp_rnto(char *fname, struct server_ctx* context) {
     }
 
     send_msg(context->cmd_fd, "250 Ok\r\n");
+
+    ftp_reset_state(context);
+}
+
+void ftp_retr(char *fname, struct server_ctx* context) {
+    int datasfd;
+    char line[1024];
+    FILE *fp;
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( !ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
+        send_msg(context->cmd_fd, " Data socket not created\r\n");
+        return;
+    }
+
+    if ( ftp_test_flags(context, SERVER_PASV) ) {
+        if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
+            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            return;
+        }
+    } else {
+        if ( (datasfd = connect(context->pasv_fd, NULL, 0)) < 0 ) {
+            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            return;
+        }
+    }
+
+    fp = fopen(fname, "r");
+    if (fp == NULL) {
+        send_msg(context->cmd_fd, " Error getting list message\r\n");
+        return;
+    }
+
+    while ( fgets(line, sizeof(line) - 1, fp) != NULL ) {
+        send_msg(datasfd, line);
+    }
+    close(datasfd);
+    fclose(fp);
+
+    send_msg(context->cmd_fd, "200 Ok\r\n");
+
+    ftp_reset_state(context);
+}
+
+void ftp_stor(char *fname, struct server_ctx* context) {
+    int datasfd;
+    char line[1024];
+    FILE *fp;
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( !ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
+        send_msg(context->cmd_fd, " Data socket not created\r\n");
+        return;
+    }
+
+    if ( ftp_test_flags(context, SERVER_PASV) ) {
+        if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
+            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            return;
+        }
+    } else {
+        if ( (datasfd = connect(context->pasv_fd, NULL, 0)) < 0 ) {
+            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            return;
+        }
+    }
+
+    fp = fopen(fname, "w");
+    if (fp == NULL) {
+        send_msg(context->cmd_fd, " Error opening file\r\n");
+        return;
+    }
+
+    do {
+        recv_msg(datasfd, line);
+        fputs(line, fp);
+    } while ( *line );
+
+    close(datasfd);
+    fclose(fp);
+
+    send_msg(context->cmd_fd, "200 Ok\r\n");
 
     ftp_reset_state(context);
 }
