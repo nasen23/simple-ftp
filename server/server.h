@@ -6,39 +6,56 @@
 struct sockaddr_in;
 struct CommandList;
 
-struct ServerCtx {
-    int client_sfd;
+typedef enum {
+SERVER_PASV   = 1 << 0, /* pasv addr ready for data transfer cmd */
+SERVER_PORT   = 1 << 1, /* port addr ready for data transfer cmd */
+SERVER_RENAME = 1 << 2, /* last cmd was rnfr and right path */
+} server_flag_t;
+
+struct server_ctx {
+    int cmd_fd;
+    int pasv_fd;
     int logged_in;
     int quit;
-    int listen_sfd;
-    char *username;
+
+    char username[256];
+    char fname[512];
+    server_flag_t flags;
 };
 
 const char* auth_users[] = {
 "anonymous"
 };
-
 const size_t AUTH_USER_COUNT = 1;
 
 void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_client);
 void recv_msg(int client_sfd, char *);
 void send_msg(int client_sfd, char *msg);
-void handle_command(struct CommandList*, struct ServerCtx*);
-void handle_parse_error(int err, struct ServerCtx*);
+void handle_command(struct CommandList*, struct server_ctx*);
+void handle_parse_error(int err, struct server_ctx*);
 
-void ftp_user(char *username, struct ServerCtx*);
-void ftp_pass(char *password, struct ServerCtx*);
-void ftp_port(char *addr, struct ServerCtx*);
-void ftp_pasv(struct ServerCtx*);
-void ftp_quit(struct ServerCtx*);
-void ftp_abor(struct ServerCtx*);
-void ftp_syst(struct ServerCtx*);
-void ftp_type(char *type, struct ServerCtx*);
-void ftp_mkd(char *dir, struct ServerCtx*);
-void ftp_cwd(char *dir, struct ServerCtx*);
-void ftp_cdup(struct ServerCtx*);
-void ftp_pwd(struct ServerCtx*);
-void ftp_list(struct ServerCtx*);
+void ftp_user(char *username, struct server_ctx*);
+void ftp_pass(char *password, struct server_ctx*);
+void ftp_port(char *addr, struct server_ctx*);
+void ftp_pasv(struct server_ctx*);
+void ftp_quit(struct server_ctx*);
+void ftp_abor(struct server_ctx*);
+void ftp_syst(struct server_ctx*);
+void ftp_type(char *type, struct server_ctx*);
+void ftp_mkd(char *dir, struct server_ctx*);
+void ftp_cwd(char *dir, struct server_ctx*);
+void ftp_cdup(struct server_ctx*);
+void ftp_pwd(struct server_ctx*);
+void ftp_list(struct server_ctx*);
+void ftp_rmd(char *dir, struct server_ctx*);
+void ftp_dele(char *fpath, struct server_ctx*);
+void ftp_rnfr(char *fpath, struct server_ctx*);
+void ftp_rnto(char *fname, struct server_ctx*);
+
+void ftp_reset_datasock(struct server_ctx*);
+int ftp_test_flags(struct server_ctx*, int flags);
+void ftp_clear_flags(struct server_ctx*, int flags);
+void ftp_reset_state(struct server_ctx*);
 
 int check_valid_user(char *username);
 int check_password(char *username, char *password);

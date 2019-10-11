@@ -18,15 +18,19 @@ MKD,
 CWD,
 CDUP,
 PWD,
-LIST
-} Command;
+LIST,
+RMD,
+DELE,
+RNFR,
+RNTO
+} server_cmd_t;
 
 const char* const cmd_list[] = {
 "USER", "PASS", "PORT", "PASV", "QUIT", "ABOR",
 "SYST", "TYPE", "MKD", "CWD", "CDUP", "PWD",
-"LIST"
+"LIST", "RMD", "DELE", "RNFR", "RNTO"
 };
-const size_t CMD_LEN = 13;
+const size_t CMD_LEN = 17;
 
 const char* const argless_cmd_list[] = {
 "PASV", "QUIT", "SYST", "PWD", "ABOR", "LIST", "CDUP"
@@ -34,7 +38,7 @@ const char* const argless_cmd_list[] = {
 const size_t ARGLESS_CMD_LEN = 7;
 
 struct CommandList {
-    Command cmd;
+    server_cmd_t cmd;
     char *arg;
 };
 
@@ -45,7 +49,7 @@ MISSING_ARG,
 SYNTAX_ERROR
 } ParseError;
 
-int _check_argless_cmd(Command cmd) {
+int _check_argless_cmd(server_cmd_t cmd) {
     const char* cmdstr = cmd_list[cmd];
     for (int i = 0; i < ARGLESS_CMD_LEN; ++i) {
         if ( !strcmp(cmdstr, argless_cmd_list[i]) ) {
@@ -76,7 +80,7 @@ int parse_string(struct CommandList *cmdlst, char *full_command) {
     // find proper cmd in enum
     for (i = 0; i < CMD_LEN; ++i) {
         if ( !strcmp(cmd_list[i], cmd) ) {
-            cmdlst->cmd = (Command) i;
+            cmdlst->cmd = (server_cmd_t) i;
             break;
         }
     }

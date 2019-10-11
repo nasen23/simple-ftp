@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         error("listen ()", n);
     }
 
-    printf("Simple FTP server started at %s:%d. Waiting for clients... \n\n", IP_SERVER, PORT_SERVER);
+    printf("Simple FTP server started at %s:%d. Waiting for clients... \n\r\n", IP_SERVER, PORT_SERVER);
 
     //持续监听连接请求
     while (1) {
@@ -67,16 +67,15 @@ void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_cli
     int err;
     char buf[BUF_SIZE];
     struct CommandList cmd;
-    struct ServerCtx context;
+    struct server_ctx context;
 
-    printf("Communacating with %s:%d\n", inet_ntoa(sin_client->sin_addr), ntohs(sin_client->sin_port));
-    send_msg(client_sfd, "220 Anonymous FTP server ready.\n");
+    printf("Communacating with %s:%d\r\n", inet_ntoa(sin_client->sin_addr), ntohs(sin_client->sin_port));
+    send_msg(client_sfd, "220 Anonymous FTP server ready.\r\n");
 
-    context.client_sfd = client_sfd;
+    context.cmd_fd = client_sfd;
     context.logged_in = 0;
     context.quit = 0;
-    context.username = NULL;
-    context.listen_sfd = 0;
+    context.pasv_fd = 0;
     while (!context.quit) {
         //榨干socket传来的内容
         recv_msg(client_sfd, buf);
@@ -90,9 +89,7 @@ void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_cli
         }
     }
 
-    free(context.username);
-
-    printf("Closing communacation with %s:%d\n", inet_ntoa(sin_client->sin_addr), ntohs(sin_client->sin_port));
+    printf("Closing communacation with %s:%d\r\n", inet_ntoa(sin_client->sin_addr), ntohs(sin_client->sin_port));
     close(client_sfd);
     fflush(stdout);
 }
@@ -112,147 +109,169 @@ void send_msg(int client_sfd, char *buf) {
     }
 }
 
-void handle_command(struct CommandList *cmd, struct ServerCtx* context) {
+void handle_command(struct CommandList *cmd, struct server_ctx* context) {
     switch (cmd->cmd) {
         case USER:
-            printf("USER\n");
+            printf("USER\r\n");
             ftp_user(cmd->arg, context);
             break;
         case PASS:
-            printf("PASS\n");
+            printf("PASS\r\n");
             ftp_pass(cmd->arg, context);
             break;
         case PORT:
-            printf("PORT\n");
+            printf("PORT\r\n");
             ftp_port(cmd->arg, context);
             break;
         case PASV:
-            printf("PASV\n");
+            printf("PASV\r\n");
             ftp_pasv(context);
             break;
         case QUIT:
-            printf("QUIT\n");
+            printf("QUIT\r\n");
             ftp_quit(context);
             break;
         case ABOR:
-            printf("ABOR\n");
+            printf("ABOR\r\n");
             ftp_abor(context);
             break;
         case SYST:
-            printf("SYST\n");
+            printf("SYST\r\n");
             ftp_syst(context);
             break;
         case TYPE:
-            printf("TYPE\n");
+            printf("TYPE\r\n");
             ftp_type(cmd->arg, context);
             break;
         case MKD:
-            printf("MKD\n");
+            printf("MKD\r\n");
             ftp_mkd(cmd->arg, context);
             break;
         case CWD:
-            printf("CWD\n");
+            printf("CWD\r\n");
             ftp_cwd(cmd->arg, context);
             break;
         case CDUP:
-            printf("CDUP\n");
+            printf("CDUP\r\n");
             ftp_cdup(context);
             break;
         case PWD:
-            printf("PWD\n");
+            printf("PWD\r\n");
             ftp_pwd(context);
             break;
         case LIST:
-            printf("LIST\n");
+            printf("LIST\r\n");
             ftp_list(context);
+            break;
+        case RMD:
+            printf("RMD\r\n");
+            ftp_rmd(cmd->arg, context);
+            break;
+        case DELE:
+            printf("DELE\r\n");
+            ftp_dele(cmd->arg, context);
+            break;
+        case RNFR:
+            printf("RNFR\r\n");
+            ftp_rnfr(cmd->arg, context);
+            break;
+        case RNTO:
+            printf("RNTO\r\n");
+            ftp_rnto(cmd->arg, context);
             break;
         default:
             break;
     }
+
 }
 
-void handle_parse_error(int err, struct ServerCtx* context) {
+void handle_parse_error(int err, struct server_ctx* context) {
     switch (err) {
         case EMPTY_COMMAND:
-            send_msg(context->client_sfd, "Empty command.\n");
+            send_msg(context->cmd_fd, "Empty command.\r\n");
             break;
         case UNKNOWN_COMMAND:
-            send_msg(context->client_sfd, "Unknown command.\n");
+            send_msg(context->cmd_fd, "Unknown command.\r\n");
             break;
         case MISSING_ARG:
-            send_msg(context->client_sfd, "Missing argument for command requiring argument.\n");
+            send_msg(context->cmd_fd, "Missing argument for command requiring argument.\r\n");
         default:
             // no err
             break;
     }
 }
 
-void ftp_user(char *username, struct ServerCtx* context) {
+void ftp_user(char *username, struct server_ctx* context) {
+    ftp_reset_state(context);
+
     if ( context->logged_in ) {
-        send_msg(context->client_sfd, "500 You are already logged in\n");
+        send_msg(context->cmd_fd, "500 You are already logged in\r\n");
         return;
     }
 
     if ( check_valid_user(username) ) {
-        context->username = realloc(context->username, (1 + strlen(username)) * sizeof(char));
-
         strcpy(context->username, username);
-        send_msg(context->client_sfd, "331 User name okay, need password\n");
+        send_msg(context->cmd_fd, "331 User name okay, need password\r\n");
     } else {
-        send_msg(context->client_sfd, "530 Invalid username\n");
+        send_msg(context->cmd_fd, "530 Invalid username\r\n");
     }
 }
 
-void ftp_pass(char *password, struct ServerCtx* context) {
+void ftp_pass(char *password, struct server_ctx* context) {
+    ftp_reset_state(context);
+
     if ( context->logged_in ) {
-        send_msg(context->client_sfd, "500 You are already logged in\n");
+        send_msg(context->cmd_fd, "500 You are already logged in\r\n");
         return;
     }
 
     if ( !context->username ) {
-        send_msg(context->client_sfd, "500 Invalid username or password\n");
+        send_msg(context->cmd_fd, "500 Invalid username or password\r\n");
         return;
     }
 
     if ( check_password(context->username, password) ) {
         context->logged_in = 1;
         char message[100];
-        sprintf(message, "230 Welcome, user %s.\n", context->username);
-        send_msg(context->client_sfd, message);
+        sprintf(message, "230 Welcome, user %s.\r\n", context->username);
+        send_msg(context->cmd_fd, message);
     } else {
-        send_msg(context->client_sfd, "530 Wrong password.\n");
+        send_msg(context->cmd_fd, "530 Wrong password.\r\n");
     }
 }
 
-void ftp_port(char *addr, struct ServerCtx* context) {
+void ftp_port(char *addr, struct server_ctx* context) {
     int args[6];
     int sockfd, port;
     char *template = "%d.%d.%d.%d";
     char host[50];
     struct sockaddr_in addr_in;
 
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
     if ( parse_addr(addr, args) != 0 ) {
-        send_msg(context->client_sfd, " Syntax error on ip address\n");
+        send_msg(context->cmd_fd, " Syntax error on ip address\r\n");
         return;
     }
 
     sprintf(host, template, args[0], args[1], args[2], args[3]);
     port = args[4] * 256 + args[5];
     if ( (sockfd = create_socket(host, port, &addr_in)) < 0 ) {
-        send_msg(context->client_sfd, " Error creating socket\n");
+        send_msg(context->cmd_fd, " Error creating socket\r\n");
         return;
     }
 
-    context->listen_sfd = sockfd;
-    send_msg(context->client_sfd, " Successfully created data transfer socket\n");
+    context->pasv_fd = sockfd;
+    context->flags |= SERVER_PORT;
+    send_msg(context->cmd_fd, " Successfully created data transfer socket\r\n");
 }
 
-void ftp_pasv(struct ServerCtx* context) {
+void ftp_pasv(struct server_ctx* context) {
     int x;
     char addr[50];
     char msg[200];
@@ -261,37 +280,39 @@ void ftp_pasv(struct ServerCtx* context) {
     int p1, p2;
     struct sockaddr_in addr_in;
 
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
     // get ip address of server
     if ( get_my_ipaddr(addr) < 0 ) {
-        send_msg(context->client_sfd, " Failed to get the ip address of server\n");
+        send_msg(context->cmd_fd, " Failed to get the ip address of server\r\n");
         return;
     }
 
-    printf("%s\n", addr);
+    printf("%s\r\n", addr);
 
     // create a socket on port between 20000 and 65535
     if ( (sockfd = create_socket(addr, port, &addr_in)) < 0 ) {
-        send_msg(context->client_sfd, " Error creating socket\n");
+        send_msg(context->cmd_fd, " Error creating socket\r\n");
         return;
     }
 
     if ( bind(sockfd, (struct sockaddr*) &addr_in, sockaddr_size) < 0 ) {
-        send_msg(context->client_sfd, " Error on binding addr\n");
+        send_msg(context->cmd_fd, " Error on binding addr\r\n");
         return;
     }
 
     if ( (listen(sockfd, 10)) < 0 ) {
-        send_msg(context->client_sfd, " Error on listening addr\n");
+        send_msg(context->cmd_fd, " Error on listening addr\r\n");
         return;
     }
 
-    printf("%d\n", sockfd);
-    context->listen_sfd = sockfd;
+    printf("%d\r\n", sockfd);
+    context->pasv_fd = sockfd;
 
     for (char *cur = addr; *cur != 0; ++cur) {
         if ( *cur == '.' ) {
@@ -302,45 +323,54 @@ void ftp_pasv(struct ServerCtx* context) {
     p1 = port / 256, p2 = port % 256;
     sprintf(msg, "227 Entering Passive Mode (%s,%d,%d)", addr, p1, p2);
 
-    send_msg(context->client_sfd, msg);
+    context->flags |= SERVER_PASV;
+    send_msg(context->cmd_fd, msg);
 }
 
-void ftp_quit(struct ServerCtx* context) {
+void ftp_quit(struct server_ctx* context) {
+    ftp_reset_state(context);
     context->quit = 1;
-    send_msg(context->client_sfd, "221 Farewell\n");
+    send_msg(context->cmd_fd, "221 Farewell\r\n");
 }
 
-void ftp_abor(struct ServerCtx* context) {
+void ftp_abor(struct server_ctx* context) {
+    ftp_reset_state(context);
     context->quit = 1;
-    send_msg(context->client_sfd, "221 Farewell\n");
+    send_msg(context->cmd_fd, "221 Farewell\r\n");
 }
 
-void ftp_syst(struct ServerCtx* context) {
+void ftp_syst(struct server_ctx* context) {
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
-    send_msg(context->client_sfd, "215 UNIX Type: L8\n");
+    send_msg(context->cmd_fd, "215 UNIX Type: L8\r\n");
 }
 
-void ftp_type(char *type, struct ServerCtx *context) {
+void ftp_type(char *type, struct server_ctx *context) {
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
     if ( strcmp("I", type) ) {
-        send_msg(context->client_sfd, "202 Type not implemented, superflous at this site\n");
+        send_msg(context->cmd_fd, "202 Type not implemented, superflous at this site\r\n");
         return;
     }
 
-    send_msg(context->client_sfd, "200 Type set to I.\n");
+    send_msg(context->cmd_fd, "200 Type set to I.\r\n");
 }
 
-void ftp_mkd(char *dir, struct ServerCtx *context) {
+void ftp_mkd(char *dir, struct server_ctx *context) {
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
@@ -349,47 +379,53 @@ void ftp_mkd(char *dir, struct ServerCtx *context) {
 
     if ( stat(dir, &st) == -1 ) {
         mkdir(dir, 0700);
-        sprintf(message, "257 \"%s\"\n", dir);
-        send_msg(context->client_sfd, message);
+        sprintf(message, "257 \"%s\"\r\n", dir);
+        send_msg(context->cmd_fd, message);
     } else {
-        send_msg(context->client_sfd, "550 Creating directory failed\n");
+        send_msg(context->cmd_fd, "550 Creating directory failed\r\n");
     }
 
 }
 
-void ftp_cwd(char *dir, struct ServerCtx *context) {
+void ftp_cwd(char *dir, struct server_ctx *context) {
+    ftp_reset_state(context);
+    
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
     if ( chdir(dir) < 0 ) {
         char msg[500];
-        sprintf(msg, "550 %s: No such file or directory\n", dir);
-        send_msg(context->client_sfd, msg);
+        sprintf(msg, "550 %s: No such file or directory\r\n", dir);
+        send_msg(context->cmd_fd, msg);
         return;
     }
 
-    send_msg(context->client_sfd, "250 Okay\n");
+    send_msg(context->cmd_fd, "250 Okay\r\n");
 }
 
-void ftp_cdup(struct ServerCtx *context) {
+void ftp_cdup(struct server_ctx *context) {
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
     if ( chdir("..") < 0 ) {
-        send_msg(context->client_sfd, "550 in root directory\n");
+        send_msg(context->cmd_fd, "550 in root directory\r\n");
         return;
     }
 
-    send_msg(context->client_sfd, "250 Okay\n");
+    send_msg(context->cmd_fd, "250 Okay\r\n");
 }
 
-void ftp_pwd(struct ServerCtx* context) {
+void ftp_pwd(struct server_ctx* context) {
+    ftp_reset_state(context);
+
     if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
         return;
     }
 
@@ -398,35 +434,34 @@ void ftp_pwd(struct ServerCtx* context) {
     getcwd(dir, sizeof(dir));
     sprintf(message, "212 \"%s\"", dir);
 
-    send_msg(context->client_sfd, message);
+    send_msg(context->cmd_fd, message);
 }
 
-void ftp_list(struct ServerCtx* context) {
+void ftp_list(struct server_ctx* context) {
     int datasfd;
-   
-    if ( !context->logged_in ) {
-        send_msg(context->client_sfd, "530 Please login first\n");
-        return;
-    }
-
-    if ( !context->listen_sfd ) {
-        send_msg(context->client_sfd, " Data socket not created\n");
-        return;
-    }
-
-    if ( (datasfd = accept(context->listen_sfd, NULL, 0)) < 0 ) {
-        send_msg(context->client_sfd, " Error trying to accept connection\n");
-        return;
-    }
-
     char path[PATH_MAX], dir[PATH_MAX];
     FILE *fp;
 
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( !ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
+        send_msg(context->cmd_fd, " Data socket not created\r\n");
+        return;
+    }
+
+    if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
+        send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+        return;
+    }
+
     getcwd(dir, sizeof(dir));
-    sprintf(path, "/bin/ls -al %s/", dir);
+    sprintf(path, "/bin/ls -al %s", dir);
     fp = popen(path, "r");
     if (fp == NULL) {
-        send_msg(context->client_sfd, " Error getting list message\n");
+        send_msg(context->cmd_fd, " Error getting list message\r\n");
         return;
     }
 
@@ -435,8 +470,116 @@ void ftp_list(struct ServerCtx* context) {
         send_msg(datasfd, path);
     }
     close(datasfd);
+    pclose(fp);
 
-    send_msg(context->client_sfd, "200 Status Ok\n");
+    send_msg(context->cmd_fd, "200 Ok\r\n");
+
+    ftp_reset_state(context);
+}
+
+void ftp_rmd(char *dir, struct server_ctx *context) {
+    int rc;
+
+    ftp_reset_state(context);
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( (rc = rmdir(dir)) != 0 ) {
+        send_msg(context->cmd_fd, "550 failed to delete directory\r\n");
+        return;
+    }
+
+    send_msg(context->cmd_fd, "250 Ok\r\n");
+}
+
+void ftp_dele(char *fpath, struct server_ctx* context) {
+    int rc;
+
+    ftp_reset_state(context);
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( (rc = unlink(fpath)) != 0 ) {
+        send_msg(context->cmd_fd, "550 Failed to delete file\r\n");
+        return;
+    }
+
+    send_msg(context->cmd_fd, "250 Ok\r\n");
+}
+
+void ftp_rnfr(char *fpath, struct server_ctx* context) {
+    int rc;
+    struct stat st;
+   
+    ftp_reset_state(context);
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    /* make sure file exists in path */
+    if ( (rc = lstat(fpath, &st)) != 0 ) {
+        send_msg(context->cmd_fd, "450 No such file or directory\r\n");
+        return;
+    }
+    strcpy(context->fname, fpath);
+
+    /* ready for rename action */
+    context->flags |= SERVER_RENAME;
+    send_msg(context->cmd_fd, "350 Ok\r\n");
+}
+
+void ftp_rnto(char *fname, struct server_ctx* context) {
+    int rc;
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( !ftp_test_flags(context, SERVER_RENAME) ) {
+        send_msg(context->cmd_fd, "503 Bad sequence of commands\r\n");
+        return;
+    }
+
+    if ( (rc = rename(context->fname, fname)) != 0 ) {
+        send_msg(context->cmd_fd, "550 Failed to rename file/directory\r\n");
+        return;
+    }
+
+    send_msg(context->cmd_fd, "250 Ok\r\n");
+
+    ftp_reset_state(context);
+}
+
+void ftp_reset_datasock(struct server_ctx *context) {
+    ftp_clear_flags(context, SERVER_PASV | SERVER_PORT);
+
+    close(context->pasv_fd);
+    context->pasv_fd = 0;
+}
+
+int ftp_test_flags(struct server_ctx* context, int flags) {
+    return context->flags & flags;
+}
+
+void ftp_clear_flags(struct server_ctx* context, int flags) {
+    context->flags &= ~flags;
+}
+
+void ftp_reset_state(struct server_ctx* context) {
+    if ( ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
+        close(context->pasv_fd);
+    }
+
+    context->flags = 0;
 }
 
 int check_valid_user(char *username) {
