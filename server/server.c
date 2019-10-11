@@ -10,6 +10,7 @@ int main(int argc, char **argv) {
     struct sockaddr_in sin_server, sin_client;
 
     char *basedir = "/tmp";
+    chdir(basedir);
 
     //设置本机的ip和port
     memset(&sin_server, 0, sizeof(sin_server));
@@ -75,8 +76,7 @@ void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_cli
     context.logged_in = 0;
     context.quit = 0;
     context.username = NULL;
-    context.datasfd = 0;
-    context.dir = basedir;
+    context.listen_sfd = 0;
     while (!context.quit) {
         //榨干socket传来的内容
         recv_msg(client_sfd, buf);
@@ -115,40 +115,56 @@ void send_msg(int client_sfd, char *buf) {
 void handle_command(struct CommandList *cmd, struct ServerCtx* context) {
     switch (cmd->cmd) {
         case USER:
-            printf("USER");
+            printf("USER\n");
             ftp_user(cmd->arg, context);
             break;
         case PASS:
-            printf("PASS");
+            printf("PASS\n");
             ftp_pass(cmd->arg, context);
             break;
         case PORT:
-            printf("PORT");
+            printf("PORT\n");
             ftp_port(cmd->arg, context);
             break;
         case PASV:
-            printf("PASV");
+            printf("PASV\n");
             ftp_pasv(context);
             break;
         case QUIT:
-            printf("QUIT");
+            printf("QUIT\n");
             ftp_quit(context);
             break;
         case ABOR:
-            printf("ABOR");
+            printf("ABOR\n");
             ftp_abor(context);
             break;
         case SYST:
-            printf("SYST");
+            printf("SYST\n");
             ftp_syst(context);
             break;
         case TYPE:
-            printf("TYPE");
+            printf("TYPE\n");
             ftp_type(cmd->arg, context);
             break;
+        case MKD:
+            printf("MKD\n");
+            ftp_mkd(cmd->arg, context);
+            break;
+        case CWD:
+            printf("CWD\n");
+            ftp_cwd(cmd->arg, context);
+            break;
+        case CDUP:
+            printf("CDUP\n");
+            ftp_cdup(context);
+            break;
         case PWD:
-            printf("PWD");
+            printf("PWD\n");
             ftp_pwd(context);
+            break;
+        case LIST:
+            printf("LIST\n");
+            ftp_list(context);
             break;
         default:
             break;
@@ -232,7 +248,7 @@ void ftp_port(char *addr, struct ServerCtx* context) {
         return;
     }
 
-    context->datasfd = sockfd;
+    context->listen_sfd = sockfd;
     send_msg(context->client_sfd, " Successfully created data transfer socket\n");
 }
 
@@ -256,13 +272,26 @@ void ftp_pasv(struct ServerCtx* context) {
         return;
     }
 
+    printf("%s\n", addr);
+
     // create a socket on port between 20000 and 65535
     if ( (sockfd = create_socket(addr, port, &addr_in)) < 0 ) {
         send_msg(context->client_sfd, " Error creating socket\n");
         return;
     }
 
-    context->datasfd = sockfd;
+    if ( bind(sockfd, (struct sockaddr*) &addr_in, sockaddr_size) < 0 ) {
+        send_msg(context->client_sfd, " Error on binding addr\n");
+        return;
+    }
+
+    if ( (listen(sockfd, 10)) < 0 ) {
+        send_msg(context->client_sfd, " Error on listening addr\n");
+        return;
+    }
+
+    printf("%d\n", sockfd);
+    context->listen_sfd = sockfd;
 
     for (char *cur = addr; *cur != 0; ++cur) {
         if ( *cur == '.' ) {
@@ -271,8 +300,7 @@ void ftp_pasv(struct ServerCtx* context) {
     }
 
     p1 = port / 256, p2 = port % 256;
-    char *temp = "227 Entering Passive Mode (%s,%d,%d)";
-    sprintf(msg, temp, addr, p1, p2);
+    sprintf(msg, "227 Entering Passive Mode (%s,%d,%d)", addr, p1, p2);
 
     send_msg(context->client_sfd, msg);
 }
@@ -310,17 +338,94 @@ void ftp_type(char *type, struct ServerCtx *context) {
     send_msg(context->client_sfd, "200 Type set to I.\n");
 }
 
+void ftp_mkd(char *dir, struct ServerCtx *context) {
+    if ( !context->logged_in ) {
+        send_msg(context->client_sfd, "530 Please login first\n");
+        return;
+    }
+
+}
+
+void ftp_cwd(char *dir, struct ServerCtx *context) {
+    if ( !context->logged_in ) {
+        send_msg(context->client_sfd, "530 Please login first\n");
+        return;
+    }
+
+    if ( chdir(dir) < 0 ) {
+        char msg[500];
+        sprintf(msg, "550 %s: No such file or directory\n", dir);
+        send_msg(context->client_sfd, msg);
+        return;
+    }
+
+    send_msg(context->client_sfd, "250 Okay\n");
+}
+
+void ftp_cdup(struct ServerCtx *context) {
+    if ( !context->logged_in ) {
+        send_msg(context->client_sfd, "530 Please login first\n");
+        return;
+    }
+
+    if ( chdir("..") < 0 ) {
+        send_msg(context->client_sfd, "550 in root directory\n");
+        return;
+    }
+
+    send_msg(context->client_sfd, "250 Okay\n");
+}
+
 void ftp_pwd(struct ServerCtx* context) {
     if ( !context->logged_in ) {
         send_msg(context->client_sfd, "530 Please login first\n");
         return;
     }
 
-    char *template = "212 \"%s\"";
-    char message[200];
-    sprintf(message, template, context->dir);
+    char message[PATH_MAX];
+    char dir[PATH_MAX];
+    getcwd(dir, sizeof(dir));
+    sprintf(message, "212 \"%s\"", dir);
 
     send_msg(context->client_sfd, message);
+}
+
+void ftp_list(struct ServerCtx* context) {
+    int datasfd;
+   
+    if ( !context->logged_in ) {
+        send_msg(context->client_sfd, "530 Please login first\n");
+        return;
+    }
+
+    if ( !context->listen_sfd ) {
+        send_msg(context->client_sfd, " Data socket not created\n");
+        return;
+    }
+
+    if ( (datasfd = accept(context->listen_sfd, NULL, 0)) < 0 ) {
+        send_msg(context->client_sfd, " Error trying to accept connection\n");
+        return;
+    }
+
+    char path[PATH_MAX], dir[PATH_MAX];
+    FILE *fp;
+
+    getcwd(dir, sizeof(dir));
+    sprintf(path, "/bin/ls -al %s/", dir);
+    fp = popen(path, "r");
+    if (fp == NULL) {
+        send_msg(context->client_sfd, " Error getting list message\n");
+        return;
+    }
+
+    printf("%s", path);
+    while ( fgets(path, sizeof(path) - 1, fp) != NULL ) {
+        send_msg(datasfd, path);
+    }
+    close(datasfd);
+
+    send_msg(context->client_sfd, "200 Status Ok\n");
 }
 
 int check_valid_user(char *username) {

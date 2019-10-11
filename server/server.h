@@ -10,9 +10,8 @@ struct ServerCtx {
     int client_sfd;
     int logged_in;
     int quit;
-    int datasfd;
+    int listen_sfd;
     char *username;
-    char *dir;
 };
 
 const char* auth_users[] = {
@@ -31,12 +30,15 @@ void ftp_user(char *username, struct ServerCtx*);
 void ftp_pass(char *password, struct ServerCtx*);
 void ftp_port(char *addr, struct ServerCtx*);
 void ftp_pasv(struct ServerCtx*);
-
 void ftp_quit(struct ServerCtx*);
 void ftp_abor(struct ServerCtx*);
 void ftp_syst(struct ServerCtx*);
 void ftp_type(char *type, struct ServerCtx*);
+void ftp_mkd(char *dir, struct ServerCtx*);
+void ftp_cwd(char *dir, struct ServerCtx*);
+void ftp_cdup(struct ServerCtx*);
 void ftp_pwd(struct ServerCtx*);
+void ftp_list(struct ServerCtx*);
 
 int check_valid_user(char *username);
 int check_password(char *username, char *password);

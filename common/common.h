@@ -45,7 +45,8 @@ int create_socket(char *host, int port, struct sockaddr_in* addr) {
 
     memset(addr, 0, sizeof(struct sockaddr_in));
     addr->sin_family = AF_INET;
-    addr->sin_port = port;
+    addr->sin_port = htons(port);
+    addr->sin_addr.s_addr = htonl(INADDR_ANY);
     if ( (x = inet_pton(AF_INET, host, &addr->sin_addr)) < 0 ) {
         return -1;
     }
@@ -69,6 +70,8 @@ int get_my_ipaddr(char *addr) {
             sprintf(addr, "%s", inet_ntoa(addr_in->sin_addr));
             break;
         }
+
+        ifa = ifa->ifa_next;
     }
 
     if ( *addr == 0 ) {

@@ -14,13 +14,24 @@ QUIT,
 ABOR,
 SYST,
 TYPE,
-PWD
+MKD,
+CWD,
+CDUP,
+PWD,
+LIST
 } Command;
 
 const char* const cmd_list[] = {
-"USER", "PASS", "PORT", "PASV", "QUIT", "ABOR", "SYST", "TYPE", "PWD"
+"USER", "PASS", "PORT", "PASV", "QUIT", "ABOR",
+"SYST", "TYPE", "MKD", "CWD", "CDUP", "PWD",
+"LIST"
 };
-const size_t CMD_LEN = 9;
+const size_t CMD_LEN = 13;
+
+const char* const argless_cmd_list[] = {
+"PASV", "QUIT", "SYST", "PWD", "ABOR", "LIST", "CDUP"
+};
+const size_t ARGLESS_CMD_LEN = 7;
 
 struct CommandList {
     Command cmd;
@@ -33,11 +44,6 @@ UNKNOWN_COMMAND,
 MISSING_ARG,
 SYNTAX_ERROR
 } ParseError;
-
-const char* const argless_cmd_list[] = {
-"PASV", "QUIT", "SYST", "PWD", "ABOR"
-};
-const size_t ARGLESS_CMD_LEN = 5;
 
 int _check_argless_cmd(Command cmd) {
     const char* cmdstr = cmd_list[cmd];
