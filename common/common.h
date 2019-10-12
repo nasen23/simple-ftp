@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/sendfile.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -15,8 +16,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <getopt.h>
 #include <dirent.h>
+#include <fcntl.h>
 
 
 #define IP_SERVER "127.0.0.1"
@@ -67,7 +69,7 @@ int get_my_ipaddr(char *addr) {
     *addr = 0;
     ifa = ifaddr;
     while (ifa) {
-        if ( ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET ) {
+        if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET && (!strcmp(ifa->ifa_name, "wlo1")) ) {
             struct sockaddr_in *addr_in = (struct sockaddr_in*) ifa->ifa_addr;
             sprintf(addr, "%s", inet_ntoa(addr_in->sin_addr));
             break;
@@ -83,6 +85,19 @@ int get_my_ipaddr(char *addr) {
     freeifaddrs(ifaddr);
 
     return 0;
+}
+
+int isdigits(char *src) {
+    char *p = src;
+    if (!p || !*p) return 0;
+
+    for (; *p; ++p) {
+        if (!isdigit(*p)) {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 #endif

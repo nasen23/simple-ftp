@@ -24,16 +24,17 @@ DELE,
 RNFR,
 RNTO,
 RETR,
-STOR
+STOR,
+REST
 } server_cmd_t;
 
 const char* const cmd_list[] = {
 "USER", "PASS", "PORT", "PASV", "QUIT", "ABOR",
 "SYST", "TYPE", "MKD" , "CWD" , "CDUP", "PWD" ,
 "LIST", "RMD" , "DELE", "RNFR", "RNTO", "RETR",
-"STOR"
+"STOR", "REST"
 };
-const size_t CMD_LEN = 19;
+const size_t CMD_LEN = 20;
 
 const char* const argless_cmd_list[] = {
 "PASV", "QUIT", "SYST", "PWD", "ABOR", "LIST", "CDUP"
@@ -50,7 +51,7 @@ EMPTY_COMMAND = 1,
 UNKNOWN_COMMAND,
 MISSING_ARG,
 SYNTAX_ERROR
-} ParseError;
+} parse_error_t;
 
 int _check_argless_cmd(server_cmd_t cmd) {
     const char* cmdstr = cmd_list[cmd];
@@ -110,7 +111,8 @@ int parse_string(struct CommandList *cmdlst, char *full_command) {
     }
 
     arg = cur;
-    while ( *cur && !isspace(*cur) ) ++cur; // stops on the first whitespace encountered
+    /* while ( *cur && !isspace(*cur) ) ++cur; // stops on the first whitespace encountered */
+    while ( *cur && *cur != '\r' && *cur != '\n' ) ++cur; // stops on \r,\n,0
     *cur = 0;
     cmdlst->arg = arg;
 

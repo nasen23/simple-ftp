@@ -2,6 +2,8 @@
 #define __SERVER_H_
 
 #include <stddef.h>
+#include <getopt.h>
+#include <limits.h>
 
 struct sockaddr_in;
 struct CommandList;
@@ -17,18 +19,30 @@ struct server_ctx {
     int pasv_fd;
     int logged_in;
     int quit;
+    size_t fpos;
 
     char username[256];
     char fname[512];
     server_flag_t flags;
 };
 
+typedef struct {
+    int port;
+    char root[PATH_MAX];
+} server_opt_t;
+
 const char* auth_users[] = {
 "anonymous"
 };
 const size_t AUTH_USER_COUNT = 1;
 
-void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_client);
+static struct option long_options[] = {
+{"port", required_argument, NULL, 'p'},
+{"root", required_argument, NULL, 'r'},
+{NULL, 0, NULL, 0}
+};
+
+void serve_for_client(int client_sfd, struct sockaddr_in *sin_client);
 void recv_msg(int client_sfd, char *);
 void send_msg(int client_sfd, char *msg);
 void handle_command(struct CommandList*, struct server_ctx*);
@@ -53,6 +67,7 @@ void ftp_rnfr(char *fpath, struct server_ctx*);
 void ftp_rnto(char *fname, struct server_ctx*);
 void ftp_retr(char *fname, struct server_ctx*);
 void ftp_stor(char *fname, struct server_ctx*);
+void ftp_rest(char *pos, struct server_ctx*);
 
 void ftp_reset_datasock(struct server_ctx*);
 int ftp_test_flags(struct server_ctx*, int flags);

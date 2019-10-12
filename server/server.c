@@ -7,15 +7,39 @@ socklen_t sockaddr_size = sizeof(struct sockaddr);
 int main(int argc, char **argv) {
     int n;
     int server_sfd, client_sfd;        //监听socket和连接socket不一样，后者用于数据传输
+    char ch;
     struct sockaddr_in sin_server, sin_client;
+    server_opt_t opt;
 
-    char *basedir = "/tmp";
-    chdir(basedir);
+    opt.port = 21;
+    strcpy(opt.root, "/tmp");
+    chdir(opt.root);
+
+    while ( (ch = getopt_long_only(argc, argv, "", long_options, NULL)) != -1 ) {
+        switch (ch) {
+            case 'p':
+                if (isdigits(optarg)) {
+                    opt.port = atoi(optarg);
+                } else {
+                    print_usage();
+                    return 0;
+                }
+                break;
+            case 'r':
+                if ( (n = chdir(optarg)) == 0 ) {
+                    strcpy(opt.root, optarg);
+                } else {
+                    print_usage();
+                    return 0;
+                }
+                break;
+        }
+    }
 
     //设置本机的ip和port
     memset(&sin_server, 0, sizeof(sin_server));
     sin_server.sin_family = AF_INET;
-    sin_server.sin_port = htons(PORT_SERVER);
+    sin_server.sin_port = htons(opt.port);
     sin_server.sin_addr.s_addr = htonl(INADDR_ANY);    //监听"0.0.0.0"
 
     //创建socket
@@ -38,7 +62,7 @@ int main(int argc, char **argv) {
         error("listen ()", n);
     }
 
-    printf("Simple FTP server started at %s:%d. Waiting for clients... \n\r\n", IP_SERVER, PORT_SERVER);
+    printf("Simple FTP server started at %s:%d. Waiting for clients... \n\r\n", IP_SERVER, opt.port);
 
     //持续监听连接请求
     while (1) {
@@ -48,12 +72,13 @@ int main(int argc, char **argv) {
         }
 
         int pid = fork();
+        /* int pid = 0; */
       
         if (pid < 0) {
             error("forking child process", pid);
         } else if (pid == 0) {
             close(server_sfd);
-            serve_for_client(client_sfd, basedir, &sin_client);
+            serve_for_client(client_sfd, &sin_client);
             return 0;
         }
 
@@ -63,7 +88,7 @@ int main(int argc, char **argv) {
     close(server_sfd);
 }
 
-void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_client) {
+void serve_for_client(int client_sfd, struct sockaddr_in *sin_client) {
     int err;
     char buf[BUF_SIZE];
     struct CommandList cmd;
@@ -76,6 +101,7 @@ void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_cli
     context.logged_in = 0;
     context.quit = 0;
     context.pasv_fd = 0;
+    context.fpos = 0;
     while (!context.quit) {
         //榨干socket传来的内容
         recv_msg(client_sfd, buf);
@@ -96,7 +122,7 @@ void serve_for_client(int client_sfd, char *basedir, struct sockaddr_in *sin_cli
 
 void recv_msg(int sockfd, char* buf) {
     int res;
-    if ((res = recv(sockfd, buf, BUF_SIZE, 0)) < 0) {
+    if ((res = recv(sockfd, buf, BUF_SIZE - 1, 0)) < 0) {
         error("recv ()", res);
     }
     buf[res] = 0;
@@ -105,7 +131,7 @@ void recv_msg(int sockfd, char* buf) {
 void send_msg(int sockfd, char *buf) {
     int res;
     if ((res = send(sockfd, buf, strlen(buf) + 1, 0)) < 0) {
-        error("recv ()", res);
+        error("send ()", res);
     }
 }
 
@@ -186,6 +212,10 @@ void handle_command(struct CommandList *cmd, struct server_ctx* context) {
         case STOR:
             printf("STOR\r\n");
             ftp_stor(cmd->arg, context);
+            break;
+        case REST:
+            printf("REST\r\n");
+            ftp_rest(cmd->arg, context);
             break;
         default:
             break;
@@ -276,7 +306,7 @@ void ftp_port(char *addr, struct server_ctx* context) {
 
     context->pasv_fd = sockfd;
     context->flags |= SERVER_PORT;
-    send_msg(context->cmd_fd, " Successfully created data transfer socket\r\n");
+    send_msg(context->cmd_fd, "250 Successfully created data transfer socket\r\n");
 }
 
 void ftp_pasv(struct server_ctx* context) {
@@ -313,7 +343,11 @@ void ftp_pasv(struct server_ctx* context) {
 
     printf("%d\r\n", sockfd);
     context->pasv_fd = sockfd;
-    strcpy(addr, inet_ntoa(pasv_addr.sin_addr));
+
+    if ( get_my_ipaddr(addr) < 0 ) {
+        send_msg(context->cmd_fd, "550 Error getting ip addr\r\n");
+        return;
+    }
 
     for (char *cur = addr; *cur; ++cur) {
         if ( *cur == '.' ) {
@@ -466,7 +500,7 @@ void ftp_list(struct server_ctx* context) {
     }
 
     getcwd(dir, sizeof(dir));
-    sprintf(path, "/bin/ls -al %s", dir);
+    sprintf(path, "/bin/ls -al \"%s\"", dir);
     fp = popen(path, "r");
     if (fp == NULL) {
         send_msg(context->cmd_fd, " Error getting list message\r\n");
@@ -483,6 +517,7 @@ void ftp_list(struct server_ctx* context) {
     send_msg(context->cmd_fd, "200 Ok\r\n");
 
     ftp_reset_state(context);
+    ftp_reset_datasock(context);
 }
 
 void ftp_rmd(char *dir, struct server_ctx *context) {
@@ -569,8 +604,11 @@ void ftp_rnto(char *fname, struct server_ctx* context) {
 
 void ftp_retr(char *fname, struct server_ctx* context) {
     int datasfd;
-    char line[1024];
-    FILE *fp;
+    off_t offset = 0;
+    char line[BUF_SIZE];
+    struct stat fst;
+    int sent, remain;
+    int fd;
 
     if ( !context->logged_in ) {
         send_msg(context->cmd_fd, "530 Please login first\r\n");
@@ -594,26 +632,39 @@ void ftp_retr(char *fname, struct server_ctx* context) {
         }
     }
 
-    fp = fopen(fname, "r");
-    if (fp == NULL) {
-        send_msg(context->cmd_fd, " Error getting list message\r\n");
+    fd = open(fname, O_RDONLY);
+    if (fd == -1) {
+        send_msg(context->cmd_fd, " Error reading file\r\n");
         return;
     }
 
-    while ( fgets(line, sizeof(line) - 1, fp) != NULL ) {
-        send_msg(datasfd, line);
+    if ( fstat(fd, &fst) ) {
+        send_msg(context->cmd_fd, " Error getting status of file\r\n");
+        return;
     }
+
+    remain = fst.st_size;
+
+    if ( context->fpos ) {
+        lseek(fd, context->fpos, SEEK_SET);
+    }
+
+    while ( (sent = sendfile(datasfd, fd, NULL, BUFSIZ)) > 0 && remain > 0 ) {
+        remain -= sent;
+    }
+
     close(datasfd);
-    fclose(fp);
 
     send_msg(context->cmd_fd, "200 Ok\r\n");
 
     ftp_reset_state(context);
+    ftp_reset_datasock(context);
+    context->fpos = 0; // reset rest command state
 }
 
 void ftp_stor(char *fname, struct server_ctx* context) {
     int datasfd;
-    char line[1024];
+    char line[BUF_SIZE];
     FILE *fp;
 
     if ( !context->logged_in ) {
@@ -638,7 +689,7 @@ void ftp_stor(char *fname, struct server_ctx* context) {
         }
     }
 
-    fp = fopen(fname, "w");
+    fp = fopen(fname, "wb");
     if (fp == NULL) {
         send_msg(context->cmd_fd, " Error opening file\r\n");
         return;
@@ -653,8 +704,28 @@ void ftp_stor(char *fname, struct server_ctx* context) {
     fclose(fp);
 
     send_msg(context->cmd_fd, "200 Ok\r\n");
-
     ftp_reset_state(context);
+    ftp_reset_datasock(context);
+}
+
+void ftp_rest(char *pos, struct server_ctx* context) {
+    ftp_reset_state(context);
+    context->fpos = 0;
+
+    if ( !context->logged_in ) {
+        send_msg(context->cmd_fd, "530 Please login first\r\n");
+        return;
+    }
+
+    if ( !isdigits(pos) ) {
+        send_msg(context->cmd_fd, "504 Invalid argument\r\n");
+        return;
+    }
+
+    context->fpos = atoi(pos);
+    printf("Resuming transmisson on byte %d...\n", context->fpos);
+
+    send_msg(context->cmd_fd, "200 Ok\r\n");
 }
 
 void ftp_reset_datasock(struct server_ctx *context) {
@@ -673,11 +744,7 @@ void ftp_clear_flags(struct server_ctx* context, int flags) {
 }
 
 void ftp_reset_state(struct server_ctx* context) {
-    if ( ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
-        close(context->pasv_fd);
-    }
-
-    context->flags = 0;
+    ftp_clear_flags(context, SERVER_RENAME);
 }
 
 int check_valid_user(char *username) {
@@ -696,7 +763,7 @@ int check_password(char *username, char *password) {
 }
 
 void print_usage() {
-    printf("usage: ");
+    printf("usage: [-port n] [-root /path/to/file/area]");
 }
 
 int randport() {
