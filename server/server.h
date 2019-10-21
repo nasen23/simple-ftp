@@ -21,6 +21,9 @@ struct server_ctx {
     int quit;
     size_t fpos;
 
+    int dport;
+    char dhost[100];
+
     char username[256];
     char fname[512];
     server_flag_t flags;
@@ -43,8 +46,8 @@ static struct option long_options[] = {
 };
 
 void serve_for_client(int client_sfd, struct sockaddr_in *sin_client);
-void recv_msg(int client_sfd, char *);
-void send_msg(int client_sfd, char *msg);
+int recv_msg(int client_sfd, char *);
+int send_msg(int client_sfd, char *msg);
 void handle_command(struct CommandList*, struct server_ctx*);
 void handle_parse_error(int err, struct server_ctx*);
 

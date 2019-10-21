@@ -8,9 +8,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <netdb.h>
 
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -25,6 +27,7 @@
 #define PORT_SERVER 6789
 
 #define BUF_SIZE 8192
+#define IP_MAXLEN 50
 
 #define error(e, x)                  \
     do {                             \
@@ -58,31 +61,10 @@ int create_socket(char *host, int port, struct sockaddr_in* addr) {
     return sockfd;
 }
 
-int get_my_ipaddr(char *addr) {
-    struct ifaddrs *ifaddr, *ifa;
-    int n;
-
-    if ( getifaddrs(&ifaddr) < 0 ) {
-        return -1;
-    }
-
-    *addr = 0;
-    ifa = ifaddr;
-    while (ifa) {
-        if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET && (!strcmp(ifa->ifa_name, "wlo1")) ) {
-            struct sockaddr_in *addr_in = (struct sockaddr_in*) ifa->ifa_addr;
-            sprintf(addr, "%s", inet_ntoa(addr_in->sin_addr));
-            break;
-        }
-
-        ifa = ifa->ifa_next;
-    }
-
-    if ( *addr == 0 ) {
-        return -1;
-    }
-
-    freeifaddrs(ifaddr);
+int get_my_ipaddr(char *addr, struct sockaddr_in *pasv_addr) {
+    gethostname(addr, IP_MAXLEN);
+    struct hostent *hp = gethostbyname(addr);
+    inet_ntop(AF_INET, (struct in_addr*)hp->h_addr_list[0], addr, IP_MAXLEN);
 
     return 0;
 }
