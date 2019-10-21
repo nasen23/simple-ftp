@@ -7,6 +7,7 @@ socklen_t sockaddr_size = sizeof(struct sockaddr);
 int main(int argc, char **argv) {
     int n;
     int server_sfd, client_sfd;        //监听socket和连接socket不一样，后者用于数据传输
+    int ifchdir = 0;
     char ch;
     struct sockaddr_in sin_server, sin_client;
     server_opt_t opt;
@@ -26,6 +27,7 @@ int main(int argc, char **argv) {
                 break;
             case 'r':
                 if ( (n = chdir(optarg)) == 0 ) {
+                    ifchdir = 1;
                     strcpy(opt.root, optarg);
                 } else {
                     print_usage();
@@ -34,7 +36,9 @@ int main(int argc, char **argv) {
                 break;
         }
     }
-    chdir(opt.root);
+    if (!ifchdir) {
+        chdir(opt.root);
+    }
 
     //设置本机的ip和port
     memset(&sin_server, 0, sizeof(sin_server));
