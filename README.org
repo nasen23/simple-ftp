@@ -1,3 +1,9 @@
-#+TITLE: README
+#+TITLE: Simple Implementation of FTP Server and Client
 
-* Simple Implementation of FTP Server and Client
+The simple implementation of the rfc file transfer protocol, this is just for homework.
+
+** Requirements
+
+- Server should be running on linux system.
+- Client require python3 and PyQt5 to work.
+
