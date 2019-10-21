@@ -40,6 +40,7 @@ class FilelistWidget(QWidget):
         self.button_layout.addWidget(self.download_btn)
         self.button_layout.addWidget(self.delete_btn)
         self.button_layout.addWidget(self.rename_btn)
+        self.button_layout.addWidget(self.mkdir_btn)
 
         self.main_layout.addWidget(self.label)
         self.main_layout.addWidget(self.path_edit)
@@ -58,6 +59,7 @@ class FilelistWidget(QWidget):
         self.download_btn = QPushButton('Download', self)
         self.delete_btn = QPushButton('Delete', self)
         self.rename_btn = QPushButton('Rename', self)
+        self.mkdir_btn = QPushButton('New Dir', self)
 
 
 class App(QWidget):
@@ -88,11 +90,13 @@ class App(QWidget):
         self.local.download_btn.clicked.connect(self.local_upload_selected_item)
         self.local.delete_btn.clicked.connect(self.local_delete_file)
         self.local.rename_btn.clicked.connect(self.local_rename_file)
+        self.local.mkdir_btn.clicked.connect(self.local_mkdir)
         self.remote.tree.itemDoubleClicked.connect(self.remote_change_dir_item)
         self.remote.path_edit.returnPressed.connect(self.remote_change_dir_byedit)
         self.remote.download_btn.clicked.connect(self.remote_download_selected_item)
         self.remote.delete_btn.clicked.connect(self.remote_delete_file)
         self.remote.rename_btn.clicked.connect(self.remote_rename_file)
+        self.remote.mkdir_btn.clicked.connect(self.remote_mkdir)
 
         self.mode_select.currentIndexChanged.connect(self.set_mode)
 
@@ -262,6 +266,18 @@ class App(QWidget):
         except Exception as e:
             self.message('Upload failed: {}'.format(e), 'red')
 
+    def local_mkdir(self):
+        try:
+            dirname, pressed = QInputDialog.getText(self, 'Create Directory', 'Directory Name:', QLineEdit.Normal)
+            if not pressed or not dirname:
+                return
+            path = os.path.join(self.local_path, dirname)
+            os.makedirs(path, exist_ok=True)
+        except Exception as e:
+            self.message('Creating Directory {} failed: {}'.format(dirname, e), 'red')
+
+        self.get_local_filelist()
+
     def remote_change_dir(self, path):
         if not self.connected:
             self.connect()
@@ -355,6 +371,17 @@ class App(QWidget):
             self.thread.start()
         except Exception as e:
             self.message('Download failed: {}'.format(e), 'red')
+
+    def remote_mkdir(self):
+        try:
+            dirname, pressed = QInputDialog.getText(self, 'Create Directory', 'Directory Name:', QLineEdit.Normal)
+            if not pressed or not dirname:
+                return
+            self.ftp.mkd(dirname)
+        except Exception as e:
+            self.message('Creating Remote Directory {} failed: {}'.format(dirname, e), 'red')
+
+        self.get_remote_filelist()
 
     def get_local_filelist(self):
         self.local.path_edit.setText(self.local_path)
