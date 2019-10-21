@@ -1,6 +1,6 @@
 #+TITLE: Simple Implementation of FTP Server and Client
 
-The simple implementation of the rfc file transfer protocol, this is just for homework.
+A simple implementation of the rfc file transfer protocol. This is just for homework.
 
 ** Requirements
 
@@ -13,7 +13,6 @@ pip install -r client/requirements.txt
 Should work just fine.
 
 ** Usage
-
 *** Server
 First compile the source code. You can do this simply by running make. A binary
 file will be created at ~./server/server~.
@@ -30,6 +29,31 @@ Move into client directory.
 python3 main.py
 #+END_SRC
 
+** Implementation Detail
+*** Server
+The main process of server runs on a infinite loop waiting for connection from any
+client. If a connection is accepted, the main process create a subprocess for
+handling commands sent from the client. So the server supports talking to multiple
+clients.
+
+Subprocesses also run on a loop receiving instructions from the client, gettings
+the job done and sending messages back to the client.
+
+The subprocess receives commands from clients and parses them into a struct
+called ~CommandList~. After parsing the command, the subprocess goes to
+~ftp_{cmd}~ to get the job done.
+
+States for the server/client are stored in ~struct server_ctx~, and passed to every
+ftp function as a argument. So ftp functions
+can know whether the client has already logged in or the client has sent a
+~PASV~ before a data transfer command.
+*** Client
+The ~FtpClient~ class is a wrapper around ~socket~. It provides useful ftp
+functions such as ~login~, throw errors on every bad response from server,
+works pretty much like ~ftplib~ from python standard library.
+
+Uploading and Downloading file would be running in another thread, so the ui
+will not be freezed.
 ** Available Server Commands
 - user
 - pass
