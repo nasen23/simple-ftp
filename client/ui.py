@@ -233,8 +233,11 @@ class App(QWidget):
         self.get_local_filelist()
 
     def upload_file(self, fp, filename, size):
-        self.ftp.store('STOR ' + filename, fp)
-        fp.close()
+        try:
+            self.ftp.store('STOR ' + filename, fp)
+            fp.close()
+        except Exception as e:
+            self.message('Uploading failed: {}'.format(e), 'red')
 
     def local_upload_selected_item(self):
         item = self.local.tree.currentItem()
@@ -323,8 +326,11 @@ class App(QWidget):
         self.get_remote_filelist()
 
     def download_file(self, fp, filename):
-        self.ftp.retrieve('RETR {}'.format(filename), callback=fp.write)
-        fp.close()
+        try:
+            self.ftp.retrieve('RETR ' + filename, callback=fp.write)
+            fp.close()
+        except Exception as e:
+            self.message('Uploading failed: {}'.format(e), 'red')
 
     def remote_download_selected_item(self):
         item = self.remote.tree.currentItem()

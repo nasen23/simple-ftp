@@ -226,6 +226,7 @@ class FtpClient(object):
         """
         if self.passive:
             host, port = self.make_pasv()
+            print(host, port)
             conn = socket.create_connection((host, port), self.timeout)
             try:
                 print(rest)
