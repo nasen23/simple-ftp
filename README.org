@@ -7,3 +7,57 @@ The simple implementation of the rfc file transfer protocol, this is just for ho
 - Server should be running on linux system.
 - Client require python3 and PyQt5 to work.
 
+#+BEGIN_SRC sh
+pip install -r client/requirements.txt
+#+END_SRC
+Should work just fine.
+
+** Usage
+
+*** Server
+First compile the source code. You can do this simply by running make. A binary
+file will be created at ~./server/server~.
+
+Run the server with following command.
+#+BEGIN_SRC sh
+server/server [-port N] [-root DIR]
+#+END_SRC
+Server would be running on port N with working directory at DIR.
+
+*** Client
+Move into client directory.
+#+BEGIN_SRC sh
+python3 main.py
+#+END_SRC
+
+** Available Server Commands
+- user
+- pass
+- port
+- pasv
+- retr
+- stor
+- quit
+- syst
+- type
+- mkd
+- cwd
+- cdup
+- pwd
+- list (partial support, does not accept any argument)
+- rmd
+- dele
+- rnfr
+- rnto
+- abor (cannot interrupt data transfer, this is actually same as *quit*)
+- rest
+
+*Note* that server could only perform data transfer in binary mode.
+
+** Client
+The client works out of the box. You don't need to know about ftp commands
+to use it.
+
+*Note* that it does not support user custom commands.
+
+[[./screenshot/client.png]]
