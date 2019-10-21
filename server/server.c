@@ -293,6 +293,7 @@ void ftp_port(char *addr, struct server_ctx* context) {
     struct sockaddr_in addr_in;
 
     ftp_reset_state(context);
+    ftp_reset_datasock(context);
 
     if ( !context->logged_in ) {
         send_msg(context->cmd_fd, "530 Please login first\r\n");
@@ -327,6 +328,7 @@ void ftp_pasv(struct server_ctx* context) {
     printf("port: %d\n", port);
 
     ftp_reset_state(context);
+    ftp_reset_datasock(context);
 
     if ( !context->logged_in ) {
         send_msg(context->cmd_fd, "530 Please login first\r\n");
