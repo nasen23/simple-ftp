@@ -194,7 +194,7 @@ class App(QWidget):
 
     def connect(self):
         try:
-            host, port = self.hostbox.text(), int(self.portbox.text())
+            host, port = self.hostbox.text().strip(), int(self.portbox.text())
             self.ftp.connect(host, port)
         except Exception as e:
             self.message('Connection refused by server: {}'.format(e), 'red')
