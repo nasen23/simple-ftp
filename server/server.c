@@ -234,13 +234,13 @@ void handle_command(struct CommandList *cmd, struct server_ctx* context) {
 void handle_parse_error(int err, struct server_ctx* context) {
     switch (err) {
         case EMPTY_COMMAND:
-            send_msg(context->cmd_fd, "Empty command.\r\n");
+            send_msg(context->cmd_fd, "503 Empty command.\r\n");
             break;
         case UNKNOWN_COMMAND:
-            send_msg(context->cmd_fd, "Unknown command.\r\n");
+            send_msg(context->cmd_fd, "503 Unknown command.\r\n");
             break;
         case MISSING_ARG:
-            send_msg(context->cmd_fd, "Missing argument for command requiring argument.\r\n");
+            send_msg(context->cmd_fd, "501 Missing argument for command requiring argument.\r\n");
         default:
             // no err
             break;
@@ -301,14 +301,14 @@ void ftp_port(char *addr, struct server_ctx* context) {
     }
 
     if ( parse_addr(addr, args) != 0 ) {
-        send_msg(context->cmd_fd, " Syntax error on ip address\r\n");
+        send_msg(context->cmd_fd, "501 Syntax error on ip address\r\n");
         return;
     }
 
     sprintf(context->dhost, template, args[0], args[1], args[2], args[3]);
     context->dport = args[4] * 256 + args[5];
     if ( (sockfd = create_socket(context->dhost, context->dport, &addr_in)) < 0 ) {
-        send_msg(context->cmd_fd, " Error creating socket\r\n");
+        send_msg(context->cmd_fd, "425 Error creating socket\r\n");
         return;
     }
 
@@ -337,17 +337,17 @@ void ftp_pasv(struct server_ctx* context) {
 
     // create a socket on port between 20000 and 65535
     if ( (sockfd = create_socket(addr, port, &pasv_addr)) < 0 ) {
-        send_msg(context->cmd_fd, " Error creating socket\r\n");
+        send_msg(context->cmd_fd, "425 Error creating socket\r\n");
         return;
     }
 
     if ( bind(sockfd, (struct sockaddr*) &pasv_addr, sockaddr_size) < 0 ) {
-        send_msg(context->cmd_fd, " Error on binding addr\r\n");
+        send_msg(context->cmd_fd, "425 Error on binding addr\r\n");
         return;
     }
 
     if ( (listen(sockfd, 10)) < 0 ) {
-        send_msg(context->cmd_fd, " Error on listening addr\r\n");
+        send_msg(context->cmd_fd, "425 Error on listening addr\r\n");
         return;
     }
 
@@ -496,13 +496,13 @@ void ftp_list(struct server_ctx* context) {
     send_msg(context->cmd_fd, "150 Ready for file transfer\r\n");
 
     if ( !ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
-        send_msg(context->cmd_fd, " Data socket not created\r\n");
+        send_msg(context->cmd_fd, "425 Data socket not created\r\n");
         return;
     }
 
     if ( ftp_test_flags(context, SERVER_PASV) ) {
         if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
-            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            send_msg(context->cmd_fd, "426 Error trying to accept connection\r\n");
             return;
         }
     } else {
@@ -510,7 +510,7 @@ void ftp_list(struct server_ctx* context) {
         dest_addr.sin_port = htons(context->dport);
         dest_addr.sin_addr.s_addr = inet_addr(context->dhost);
         if ( connect(context->pasv_fd, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr)) < 0 ) {
-            send_msg(context->cmd_fd, " Error trying to connect\r\n");
+            send_msg(context->cmd_fd, "426 Error trying to connect\r\n");
             return;
         }
         datasfd = context->pasv_fd;
@@ -520,7 +520,7 @@ void ftp_list(struct server_ctx* context) {
     sprintf(path, "/bin/ls -al \"%s\"", dir);
     fp = popen(path, "r");
     if (fp == NULL) {
-        send_msg(context->cmd_fd, " Error getting list message\r\n");
+        send_msg(context->cmd_fd, "451 Error getting list message\r\n");
         return;
     }
 
@@ -633,13 +633,13 @@ void ftp_retr(char *fname, struct server_ctx* context) {
     send_msg(context->cmd_fd, "150 Ready for file transfer\r\n");
 
     if ( !ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
-        send_msg(context->cmd_fd, " Data socket not created\r\n");
+        send_msg(context->cmd_fd, "425 Data socket not created\r\n");
         return;
     }
 
     if ( ftp_test_flags(context, SERVER_PASV) ) {
         if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
-            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            send_msg(context->cmd_fd, "426 Error trying to accept connection\r\n");
             return;
         }
     } else {
@@ -647,7 +647,7 @@ void ftp_retr(char *fname, struct server_ctx* context) {
         dest_addr.sin_port = htons(context->dport);
         dest_addr.sin_addr.s_addr = inet_addr(context->dhost);
         if ( connect(context->pasv_fd, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr)) < 0 ) {
-            send_msg(context->cmd_fd, " Error trying to connect\r\n");
+            send_msg(context->cmd_fd, "426 Error trying to connect\r\n");
             return;
         }
         datasfd = context->pasv_fd;
@@ -655,12 +655,12 @@ void ftp_retr(char *fname, struct server_ctx* context) {
 
     fd = open(fname, O_RDONLY);
     if (fd == -1) {
-        send_msg(context->cmd_fd, " Error reading file\r\n");
+        send_msg(context->cmd_fd, "550 Error reading file\r\n");
         return;
     }
 
     if ( fstat(fd, &fst) ) {
-        send_msg(context->cmd_fd, " Error getting status of file\r\n");
+        send_msg(context->cmd_fd, "550 Error getting status of file\r\n");
         return;
     }
 
@@ -698,13 +698,13 @@ void ftp_stor(char *fname, struct server_ctx* context) {
     send_msg(context->cmd_fd, "150 Ready for file transfer\r\n");
 
     if ( !ftp_test_flags(context, SERVER_PASV | SERVER_PORT) ) {
-        send_msg(context->cmd_fd, " Data socket not created\r\n");
+        send_msg(context->cmd_fd, "425 Data socket not created\r\n");
         return;
     }
 
     if ( ftp_test_flags(context, SERVER_PASV) ) {
         if ( (datasfd = accept(context->pasv_fd, NULL, 0)) < 0 ) {
-            send_msg(context->cmd_fd, " Error trying to accept connection\r\n");
+            send_msg(context->cmd_fd, "426 Error trying to accept connection\r\n");
             return;
         }
     } else {
@@ -712,7 +712,7 @@ void ftp_stor(char *fname, struct server_ctx* context) {
         dest_addr.sin_port = htons(context->dport);
         dest_addr.sin_addr.s_addr = inet_addr(context->dhost);
         if ( connect(context->pasv_fd, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr)) < 0 ) {
-            send_msg(context->cmd_fd, " Error trying to connect\r\n");
+            send_msg(context->cmd_fd, "426 Error trying to connect\r\n");
             return;
         }
         datasfd = context->pasv_fd;
@@ -720,7 +720,7 @@ void ftp_stor(char *fname, struct server_ctx* context) {
 
     fp = fopen(fname, "wb");
     if (fp == NULL) {
-        send_msg(context->cmd_fd, " Error opening file\r\n");
+        send_msg(context->cmd_fd, "550 Error opening file\r\n");
         return;
     }
 
