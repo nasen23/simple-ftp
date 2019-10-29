@@ -26,6 +26,7 @@ class MyThread(QThread):
 class RadioDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowTitle('File with same name exists')
         layout = QVBoxLayout(self)
 
         buttons = [QRadioButton('overwrite'), QRadioButton('append'), QRadioButton('rest')]
