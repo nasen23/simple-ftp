@@ -34,12 +34,18 @@ class RadioDialog(QDialog):
             layout.addWidget(button)
             self.button_group.addButton(button, index)
 
-        bottom_buttons = QDialogButtonBox(
+        self.bottom_buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
             Qt.Horizontal, self)
-        bottom_buttons.accepted.connect(self.accept)
-        bottom_buttons.rejected.connect(self.reject)
-        layout.addWidget(bottom_buttons)
+        self.bottom_buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        self.bottom_buttons.accepted.connect(self.accept)
+        self.bottom_buttons.rejected.connect(self.reject)
+        layout.addWidget(self.bottom_buttons)
+
+        self.button_group.buttonClicked.connect(self.enable_button)
+
+    def enable_button(self):
+        self.bottom_buttons.button(QDialogButtonBox.Ok).setEnabled(True)
 
     def text(self):
         return self.button_group.checkedButton().text()
