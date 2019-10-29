@@ -226,14 +226,11 @@ class FtpClient(object):
         """
         if self.passive:
             host, port = self.make_pasv()
-            print(host, port)
             conn = socket.create_connection((host, port), self.timeout)
             try:
-                print(rest)
                 if rest is not None:
                     self.send_cmd('REST ' + rest)
                 res = self.send_cmd(cmd)
-                print('res: ' + res)
             except:
                 conn.close()
                 raise

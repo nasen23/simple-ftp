@@ -5,7 +5,8 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QLineEdit,
                              QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTextEdit, QTreeWidget,
                              QCompleter, QTreeWidgetItem, QInputDialog,
-                             QComboBox)
+                             QComboBox, QDialog, QRadioButton,
+                             QButtonGroup, QDialogButtonBox)
 from PyQt5.QtGui import QRegExpValidator, QIcon, QColor
 from PyQt5.QtCore import *
 
@@ -20,6 +21,36 @@ class MyThread(QThread):
 
     def run(self):
         self.f()
+
+
+class RadioDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+
+        buttons = [QRadioButton('overwrite'), QRadioButton('append'), QRadioButton('rest')]
+        self.button_group = QButtonGroup(self)
+        for index, button in enumerate(buttons):
+            layout.addWidget(button)
+            self.button_group.addButton(button, index)
+
+        bottom_buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            Qt.Horizontal, self)
+        bottom_buttons.accepted.connect(self.accept)
+        bottom_buttons.rejected.connect(self.reject)
+        layout.addWidget(bottom_buttons)
+
+    def text(self):
+        return self.button_group.checkedButton().text()
+
+    @staticmethod
+    def getOption(parent=None):
+        dialog = RadioDialog(parent)
+        result = dialog.exec_()
+        text = dialog.text()
+        return text, result == QDialog.Accepted
+
 
 class FilelistWidget(QWidget):
 
@@ -341,9 +372,9 @@ class App(QWidget):
 
         self.get_remote_filelist()
 
-    def download_file(self, fp, filename):
+    def download_file(self, fp, filename, rest=None):
         try:
-            self.ftp.retrieve('RETR ' + filename, callback=fp.write)
+            self.ftp.retrieve('RETR ' + filename, callback=fp.write, rest=rest)
             fp.close()
         except Exception as e:
             self.message('Uploading failed: {}'.format(e), 'red')
@@ -358,17 +389,34 @@ class App(QWidget):
             filename = item.text(0)
             size = item.text(1)
             path = os.path.join(self.local_path, filename)
-            fp = open(path, 'wb')
 
-            def download_file():
-                self.download_file(fp, filename)
+            if os.path.isfile(path):
+                # file exist, ask for which action to take
+                mode, ok = RadioDialog.getOption(self)
+            else:
+                mode, ok = 'overwrite', True
 
-            def message():
-                self.message('Downloading {} complete: total {} bytes'.format(filename, size))
-                self.get_local_filelist()
+            if ok:
+                if mode == 'overwrite':
+                 open_mode = 'wb'
+                else:
+                    open_mode = 'ab'
+               
+                fp = open(path, open_mode)
+                rest = None
+                if mode == 'rest':
+                    # rest should be local file size
+                    rest = str(os.path.getsize(path))
 
-            self.thread = MyThread(f=download_file, finish=message)
-            self.thread.start()
+                def download_file():
+                    self.download_file(fp, filename, rest)
+
+                def message():
+                    self.message('Downloading {} complete: total {} bytes'.format(filename, size))
+                    self.get_local_filelist()
+
+                self.thread = MyThread(f=download_file, finish=message)
+                self.thread.start()
         except Exception as e:
             self.message('Download failed: {}'.format(e), 'red')
 
