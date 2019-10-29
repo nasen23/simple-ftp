@@ -3,4 +3,5 @@ bin/*
 .vim/*
 TODO.org
 *.save
-/client/__pycache__/ftp.cpython-37.pyc
+__pycache__/
+server
