@@ -48,7 +48,10 @@ class RadioDialog(QDialog):
         self.bottom_buttons.button(QDialogButtonBox.Ok).setEnabled(True)
 
     def text(self):
-        return self.button_group.checkedButton().text()
+        if self.button_group.checkedButton():
+            return self.button_group.checkedButton().text()
+
+        return None
 
     @staticmethod
     def getOption(parent=None):
