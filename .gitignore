@@ -4,4 +4,3 @@ bin/*
 TODO.org
 *.save
 __pycache__/
-server
