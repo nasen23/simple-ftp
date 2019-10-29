@@ -400,7 +400,7 @@ class App(QWidget):
                 icon = QIcon(self.fileicon_path)
                 item.isdir = False
 
-            size = fileinfo.size()
+            size = '' if item.isdir else fileinfo.size()
             time = fileinfo.lastModified().toString()
             owner = fileinfo.owner()
             group = fileinfo.group()
@@ -441,13 +441,17 @@ class App(QWidget):
             res = self.ftp.retrieve_result('LIST')
             res = res.splitlines()
             # first line is 'total xxx', last line is empty
-            for info in res[1:-1]:
+            for info in res:
+                if not info or info.startswith('total') or info.isspace():
+                    continue
+
                 mode, num, owner, group, size, time, filename = self.parse_fileinfo(info)
 
                 item = QTreeWidgetItem()
                 if mode[0] == 'd':
                     icon = QIcon(self.foldericon_path)
                     item.isdir = True
+                    size = ''
                 else:
                     icon = QIcon(self.fileicon_path)
                     item.isdir = False
