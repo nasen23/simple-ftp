@@ -1,12 +1,7 @@
 import os, sys
 from ftp import FtpClient
 from shutil import rmtree
-from PyQt5.QtWidgets import (QApplication, QWidget, QLineEdit,
-                             QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QTextEdit, QTreeWidget,
-                             QCompleter, QTreeWidgetItem, QInputDialog,
-                             QComboBox, QDialog, QRadioButton,
-                             QButtonGroup, QDialogButtonBox)
+from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QRegExpValidator, QIcon, QColor
 from PyQt5.QtCore import *
 
