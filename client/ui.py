@@ -280,6 +280,9 @@ class App(QWidget):
             self.message('Uploading failed: {}'.format(e), 'red')
 
     def local_upload_selected_item(self):
+        if not self.connected:
+            return 
+
         item = self.local.tree.currentItem()
 
         if not item or item.isdir:
@@ -495,6 +498,7 @@ class App(QWidget):
             res = res.splitlines()
             # first line is 'total xxx', last line is empty
             for info in res:
+                print(info)
                 if not info or info.startswith('total') or info.isspace():
                     continue
 
